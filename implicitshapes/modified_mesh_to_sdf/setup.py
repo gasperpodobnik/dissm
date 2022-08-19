@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="mesh-to-sdf",
+    name="mesh_to_sdf",
     version="0.0.12",
     author="Marian Kleineberg",
     author_email="mail@marian42.de",
@@ -18,7 +18,7 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    python_requires='>=3.5',
+    # python_requires='>=3.5',
     data_files=[('shaders', ['mesh_to_sdf/shaders/mesh.frag', 'mesh_to_sdf/shaders/mesh.vert'])],
     include_package_data = True
 )

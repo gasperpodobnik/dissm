@@ -1,0 +1,13 @@
+README.md
+setup.py
+mesh_to_sdf/__init__.py
+mesh_to_sdf/pyrender_wrapper.py
+mesh_to_sdf/scan.py
+mesh_to_sdf/surface_point_cloud.py
+mesh_to_sdf/utils.py
+mesh_to_sdf.egg-info/PKG-INFO
+mesh_to_sdf.egg-info/SOURCES.txt
+mesh_to_sdf.egg-info/dependency_links.txt
+mesh_to_sdf.egg-info/top_level.txt
+mesh_to_sdf/shaders/mesh.frag
+mesh_to_sdf/shaders/mesh.vert

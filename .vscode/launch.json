@@ -1,0 +1,40 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "train_dissm",
+            "type": "python",
+            "request": "launch",
+            "program": "/media/medical/gasperp/projects/dissm/implicitshapes/embed_shape.py",
+            // "console": "integratedTerminal",
+            "console": "internalConsole", // we need to use this because of special characters in args (regex expression includes parenthesis)
+            "cwd": "${workspaceRoot}",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/.vscode/.env",
+                "PYDEVD_WARN_EVALUATION_TIMEOUT": "500"
+            },
+            "args": [
+                "--im_root",
+                "/media/medical/projects/head_and_neck/onkoi_2019/dissm/train/Parotid_L_sdf",
+                "--yaml_file",
+                "/media/medical/gasperp/projects/dissm/implicitshapes/configs/embed_config.yml",
+                "--save_path",
+                "/media/medical/gasperp/projects/dissm/network",
+                "--file_list",
+                "/media/medical/projects/head_and_neck/onkoi_2019/dissm/train/Parotid_L_sdf/json_list.json",
+            ]
+        },
+    ]
+}

@@ -3,22 +3,62 @@ import json
 import math
 import argparse
 import torch
+from types import SimpleNamespace
 
-from dlt_utils import (read_yaml, init_workspace,
+from implicitshapes.dlt_utils import (read_yaml, init_workspace,
                        Context, MoveToCuda, PreIterTransform, Callable,
                        TQDMConsoleLogger, OnlineAverageLoss, SupervisedTrainer,
                        Checkpointer, OptimScheduler)
-from dataset import SDFSamples
-from networks.deep_sdf_decoder import Decoder
+from implicitshapes.dataset import SDFSamples
+from implicitshapes.networks.deep_sdf_decoder import Decoder
 
+def load_model(yaml_filepath):
+    
+    config = read_yaml(yaml_filepath)
+    latent_size = config.solver.latent_size
+    
+    model_layers_dims = config.model.dims
+    model_dropout = config.model.dropout
+    norm_layers = config.model.norm_layers
+    dropout_prob = config.model.dropout_prob
+    weight_norm = config.model.weight_norm
+    latent_in = config.model.latent_in
+    xyz_in_all = config.model.xyz_in_all
+    use_tanh = config.model.use_tanh
+    latent_dropout = config.model.latent_dropout
+    model = Decoder(latent_size, model_layers_dims, dropout=model_dropout, norm_layers=norm_layers, 
+            weight_norm=weight_norm, dropout_prob=dropout_prob, latent_in=latent_in, xyz_in_all=xyz_in_all,
+            use_tanh=use_tanh, latent_dropout=latent_dropout)
 
-def run_train(args):
+    print(model)
+    return model
+
+def turn_off_gradients(model):
+    for param in model.parameters():
+        param.requires_grad = False
+        
+def create_embedding(initializations_vector):
+    latent_size = len(initializations_vector)
+    embed = torch.nn.Embedding(1, latent_size)
+    embed.weight.data.copy_(initializations_vector)
+    return embed
+
+def run_adjust_to_shape(args):
+    if not __name__=='__main__':
+        args = SimpleNamespace(**args)
+    loaded = torch.load(args.model_path)
+    latent_vecs = loaded['component.latent_vector']['weight']
+    mean_latent_vec = torch.mean(latent_vecs, 0)
+    latent_vecs = latent_vecs.numpy()
+    
     ###############################################################################################
     ###### Step 0. Environment Setup
     ###############################################################################################
 
     # Step 0.1 Read Configuration Document
     config = read_yaml(args.yaml_file)
+    
+    config.solver.epochs = args.epochs
 
     # Step 0.2 Setup the context variable
     context = Context()
@@ -28,9 +68,13 @@ def run_train(args):
     ###### Step 1. Data Preparation
     ###############################################################################################
     im_dir = args.im_root
-    list_file = args.file_list
-    with open(list_file ,'r') as f:
-        json_list = json.load(f)
+    
+    if isinstance(args.file_list, str):
+        list_file = args.file_list
+        with open(list_file ,'r') as f:
+            json_list = json.load(f)
+    else:
+        json_list=args.file_list
 
 
     # we use a special dataset specifically for SDF samples
@@ -46,22 +90,10 @@ def run_train(args):
 
     context['component.train_loader'] = dataloader
 
-    # number of shapes to embed
-    num_scenes = len(dataset)
     latent_size = config.solver.latent_size
-    # magnitude of latent vector for initialization
-    code_bound = config.solver.code_bound
-    code_std_dev = config.solver.code_std_dev
-    if code_bound == -1:
-        code_bound = None
 
     # initialize the latent vectors with normal distribution
-    lat_vecs = torch.nn.Embedding(num_scenes, latent_size, max_norm=code_bound)
-    torch.nn.init.normal_(
-        lat_vecs.weight.data,
-        0.0,
-        code_std_dev / math.sqrt(latent_size),
-    )
+    lat_vecs = create_embedding(mean_latent_vec)
     # store the latent space as a `global` variable in the context
     context['component.latent_vector'] = lat_vecs
 
@@ -140,21 +172,14 @@ def run_train(args):
     #*****
 
     # set up the DeepSDF model based on the configuration parameters
-    model_layers_dims = config.model.dims
-    model_dropout = config.model.dropout
-    norm_layers = config.model.norm_layers
-    dropout_prob = config.model.dropout_prob
-    weight_norm = config.model.weight_norm
-    latent_in = config.model.latent_in
-    xyz_in_all = config.model.xyz_in_all
-    use_tanh = config.model.use_tanh
-    latent_dropout = config.model.latent_dropout
-    model = Decoder(latent_size, model_layers_dims, dropout=model_dropout, norm_layers=norm_layers, 
-            weight_norm=weight_norm, dropout_prob=dropout_prob, latent_in=latent_in, xyz_in_all=xyz_in_all,
-            use_tanh=use_tanh, latent_dropout=latent_dropout)
+    model = load_model(args.yaml_file)
+    state_dict = {i.replace('module.', ''): j for i, j in loaded['component.model'].items()}
+    model.load_state_dict(state_dict)
+    turn_off_gradients(model)
 
     print(model)
-    
+    for name, param in model.named_parameters():
+        print(name, param.requires_grad)
     model = torch.nn.DataParallel(model).cuda()
 
     context['component.model'] = model
@@ -184,10 +209,10 @@ def run_train(args):
     lr_model = config.solver.model_lr
     optimizer_all = torch.optim.Adam(
         [
-            {
-                "params": model.parameters(),
-                "lr": lr_model,
-            },
+            # {
+            #     "params": model.parameters(),
+            #     "lr": lr_model,
+            # },
             {
                 "params": lat_vecs.parameters(),
                 "lr":  lr_latent
@@ -235,14 +260,20 @@ def run_train(args):
         )
     trainer.run()
     
+    
+    
+    return context['component.latent_vector'].weight
+
+
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--im_root', type=str, help="root directory of images")
+    parser.add_argument('--model_path', type=str, help="path to trained sdf model")
     parser.add_argument('--file_list', type=str, help="json list of SDF samples to embed")
-
+    parser.add_argument('--epochs', type=int, help="")
     parser.add_argument('--yaml_file', type=str, help="path to yaml file for configuration", default='hyper-parameters.yml')
     parser.add_argument('--save_path', type=str, help="path to where you want checkpoints and logs save to", default='./')
     args = parser.parse_args()
 
 
-    run_train(args)
+    run_adjust_to_shape(args)

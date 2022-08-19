@@ -18,7 +18,7 @@ from monai.utils import (
 )
 from torch.utils.data.sampler import Sampler
 
-from im_utils import crop_to_bbox
+from implicitshapes.im_utils import crop_to_bbox
 
 
 class CustomRandomAffine(MapTransform):
@@ -51,19 +51,23 @@ class CustomRandomAffine(MapTransform):
         affine = np.eye(4)
         if rotate_params:
             rotate_mtx = create_rotate(3, rotate_params)
-            affine = affine @ rotate_mtx
+            # affine = affine @ rotate_mtx
+            affine = np.matmul( affine,  rotate_mtx)
             data_dict['rotate_aug_mtx'] = rotate_mtx
         if shear_params:
             shear_mtx = create_shear(3, shear_params) 
-            affine = affine @ shear_mtx
+            # affine = affine @ shear_mtx
+            affine = np.matmul(affine, shear_mtx)
             data_dict['shear_aug_mtx'] = shear_mtx
         if translate_params:
             translate_mtx = create_translate(3, translate_params)
-            affine = affine @ translate_mtx
+            # affine = affine @ translate_mtx
+            affine = np.matmul(affine, translate_mtx)
             data_dict['translate_aug_mtx'] = translate_mtx
         if scale_params:
             scale_mtx = create_scale(3, scale_params)
-            affine = affine @ scale_mtx
+            # affine = affine @ scale_mtx
+            affine = np.matmul(affine, scale_mtx)
             data_dict['scale_aug_mtx'] = scale_mtx
         data_dict[self.output_key] = affine
         return data_dict
@@ -268,7 +272,8 @@ class AddMaskChannel():
         if self.init_affine_key:
             init_affine = data_dict[self.init_affine_key]
             # update the affine matrix for the sdf coordinates
-            cur_affine = init_affine @ cur_affine
+            # cur_affine = init_affine @ cur_affine
+            cur_affine = np.matmul(init_affine, cur_affine)
         # if specified, we update the initial guess by any geometric data augmentations applied to the image
         if self.affine_mtx_key:
             affine_matrix = data_dict[self.affine_mtx_key]
@@ -278,14 +283,18 @@ class AddMaskChannel():
         # create the random affine jitter of the initial solution
         rand_affine = np.eye(4)
         if rotate_params:
-            rand_affine = rand_affine @ create_rotate(3, rotate_params)
+            # rand_affine = rand_affine @ create_rotate(3, rotate_params)
+            rand_affine = np.matmul(rand_affine, create_rotate(3, rotate_params))
         if translate_params:
-            rand_affine = rand_affine @ create_translate(3, translate_params)
+            # rand_affine = rand_affine @ create_translate(3, translate_params)
+            rand_affine = np.matmul(rand_affine, create_translate(3, translate_params))
         if scale_params:
-            rand_affine = rand_affine @ create_scale(3, scale_params)
+            # rand_affine = rand_affine @ create_scale(3, scale_params)
+            rand_affine = np.matmul(rand_affine, create_scale(3, scale_params))
         # print(rotate_params, translate_params, scale_params)
         # update both coordinate affine and the image affine matrix
-        cur_affine = rand_affine @ cur_affine
+        # cur_affine = rand_affine @ cur_affine
+        cur_affine = np.matmul(rand_affine, cur_affine)
         cur_affine_for_image = deepcopy(cur_affine)
         # start = time.time()
 
@@ -585,12 +594,14 @@ class SDFSamples(torch.utils.data.Dataset):
             json_list,
             subsample,
             im_root,
-            sdf_sample_root,
+            # sdf_sample_root,
+            sdf_sample_root=None,
             load_ram=False,
             transforms=None,
             gt_trans_key='t'
     ):
-        self.sdf_sample_root = sdf_sample_root
+        # self.sdf_sample_root = sdf_sample_root
+        self.sdf_sample_root = im_root
         self.subsample = subsample
         self.im_root = im_root
         self.transforms = transforms
@@ -633,9 +644,11 @@ class SDFSamples(torch.utils.data.Dataset):
             return sample
         else:
             # get the filename from the current dict
-            im = self.json_list[idx]['im'].replace('.nii.gz', '')
+            # im = self.json_list[idx]['im'].replace('.nii.gz', '')
+            im = self.json_list[idx]['path'].replace('.nii.gz', '')
             sdf_filename = os.path.join(
-                self.sdf_sample_root, im + '.npz'
+                # self.sdf_sample_root, im + '.npz'
+                self.sdf_sample_root, im
             )
 
             im_filename = os.path.join(self.im_root, im + '.nii.gz')
@@ -649,7 +662,8 @@ class SDFSamples(torch.utils.data.Dataset):
             sample['idx'] = idx
             # if there are any additional entries in the dict, load them as well
             sample['im'] = im_filename
-            sample[self.gt_trans_key] = self.json_list[idx][self.gt_trans_key]
+            # sample[self.gt_trans_key] = self.json_list[idx][self.gt_trans_key]
+            sample[self.gt_trans_key] = self.json_list[idx]['path']
             # conduct any transforms, if specified
             if self.transforms:
                 sample = self.transforms(sample)
@@ -717,12 +731,18 @@ class Affine_w_Mtx(Transform):
     def __init__(
             self,
             affine_mtx,
-            spatial_size: Optional[Union[Sequence[int], int]] = None,
-            mode: Union[GridSampleMode, str] = GridSampleMode.BILINEAR,
-            padding_mode: Union[GridSamplePadMode, str] = GridSamplePadMode.REFLECTION,
-            as_tensor_output: bool = False,
-            device: Optional[torch.device] = None,
-    ) -> None:
+            # spatial_size: Optional[Union[Sequence[int], int]] = None,
+            spatial_size = None,
+            # mode: Union[GridSampleMode, str] = GridSampleMode.BILINEAR,
+            mode = GridSampleMode.BILINEAR,
+            # padding_mode: Union[GridSamplePadMode, str] = GridSamplePadMode.REFLECTION,
+            padding_mode = GridSamplePadMode.REFLECTION,
+            # as_tensor_output: bool = False,
+            as_tensor_output = False,
+            # device: Optional[torch.device] = None,
+            device = None,
+    # ) -> None:
+    ):
         """
         The affine transformations are applied in rotate, shear, translate, scale order.
 
@@ -750,16 +770,23 @@ class Affine_w_Mtx(Transform):
         )
         self.resampler = Resample(as_tensor_output=as_tensor_output, device=device)
         self.spatial_size = spatial_size
-        self.mode: GridSampleMode = GridSampleMode(mode)
-        self.padding_mode: GridSamplePadMode = GridSamplePadMode(padding_mode)
+        # self.mode: GridSampleMode = GridSampleMode(mode)
+        self.mode = GridSampleMode(mode)
+        # self.padding_mode: GridSamplePadMode = GridSamplePadMode(padding_mode)
+        self.padding_mode = GridSamplePadMode(padding_mode)
 
     def __call__(
             self,
-            img: Union[np.ndarray, torch.Tensor],
-            spatial_size: Optional[Union[Sequence[int], int]] = None,
-            mode: Optional[Union[GridSampleMode, str]] = None,
-            padding_mode: Optional[Union[GridSamplePadMode, str]] = None,
-    ) -> Union[np.ndarray, torch.Tensor]:
+            # img: Union[np.ndarray, torch.Tensor],
+            img,
+            # spatial_size: Optional[Union[Sequence[int], int]] = None,
+            spatial_size = None,
+            # mode: Optional[Union[GridSampleMode, str]] = None,
+            mode = None,
+            # padding_mode: Optional[Union[GridSamplePadMode, str]] = None,
+            padding_mode = None,
+    # ) -> Union[np.ndarray, torch.Tensor]:
+    ):
         """
         Args:
             img: shape must be (num_channels, H, W[, D]),
@@ -797,17 +824,22 @@ class AffineGrid_w_Mtx(Transform):
     def __init__(
             self,
             affine_mtx,
-            as_tensor_output: bool = True,
-            device: Optional[torch.device] = None,
-    ) -> None:
+            # as_tensor_output: bool = True,
+            as_tensor_output = True,
+            # device: Optional[torch.device] = None,
+            device = None,
+    # ) -> None:
+    ):
 
         self.as_tensor_output = as_tensor_output
         self.device = device
         self.affine = affine_mtx
 
     def __call__(
-            self, spatial_size: Optional[Sequence[int]] = None, grid: Optional[Union[np.ndarray, torch.Tensor]] = None
-    ) -> Union[np.ndarray, torch.Tensor]:
+            # self, spatial_size: Optional[Sequence[int]] = None, grid: Optional[Union[np.ndarray, torch.Tensor]] = None
+            self, spatial_size = None, grid = None
+    # ) -> Union[np.ndarray, torch.Tensor]:
+    ):
         """
         Args:
             spatial_size: output grid size.
@@ -827,7 +859,8 @@ class AffineGrid_w_Mtx(Transform):
         if self.device:
             grid = grid.to(self.device)
             self.affine = self.affine.to(self.device)
-        grid = (self.affine.float() @ grid.reshape((grid.shape[0], -1)).float()).reshape([-1] + list(grid.shape[1:]))
+        # grid = (self.affine.float() @ grid.reshape((grid.shape[0], -1)).float()).reshape([-1] + list(grid.shape[1:]))
+        grid = (np.matmul(self.affine.float(), grid.reshape((grid.shape[0], -1)).float())).reshape([-1] + list(grid.shape[1:]))
         if self.as_tensor_output:
             return grid
         return grid.cpu().numpy()

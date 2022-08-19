@@ -256,7 +256,8 @@ class WorldToVoxelAffine(BaseTransform):
             cur_affine = np.linalg.solve(trans_affine,  cur_affine)
             # now center the transform back to follow the convention that we are operating on centered pixel coordinates
             if self.centering_affine is not None:
-                cur_affine = self.centering_affine @ cur_affine 
+                # cur_affine = self.centering_affine @ cur_affine 
+                cur_affine = np.matmul(self.centering_affine, cur_affine)
 
             data_dict[field] = cur_affine
 

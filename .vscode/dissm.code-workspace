@@ -1,0 +1,22 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../point_library/rpm_tps"
+		},
+		{
+			"path": "../../../../projects/head_and_neck/onkoi_2019/dissm"
+		},
+		{
+			"path": "../../utilities"
+		},
+		{
+			"path": "../../../../projects/head_and_neck/onkoi_2019-old/shape/left_parotids_centered"
+		}
+	],
+	"settings": {
+		"python.envFile": "${workspaceFolder}/.vscode/.env",
+	}
+}
